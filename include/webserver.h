@@ -9,7 +9,12 @@ public:
     WebServer();
     ~WebServer();
 
+    // WebServer 初始化
+    void init();
+
     void thread_pool();
+private:
+    
 };
 
 #endif

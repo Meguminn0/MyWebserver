@@ -1,42 +1,68 @@
 #include <iostream>
-#include "my_threadPool.h"
+#include <fstream>
 
-// io 互斥量
-std::mutex mtx_io;
+#include "webserver.h"
+#include <string>
 
-void func(int i, int j)
-{
+#define DEBUG
+
+// 数据库信息
+std::string user_name;      /* 数据库用户名 */
+std::string pwd;            /* 数据库密码 */
+std::string databaseName;   /* 使用的数据库名 */
+
+bool getconfig()
+{    
+    std::ifstream ifs;
+    ifs.open("config.ini", std::ios::in);
+
+    if (!ifs.is_open())
     {
-        std::unique_lock<std::mutex> ulock(mtx_io);
-        std::cout << "task" << i + j << "begin to work...\n";
+        std::cout << "open error\n";
+        return false;
     }
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    std::string str_config;
+    while(ifs >> str_config)
     {
-        std::unique_lock<std::mutex> ulock(mtx_io);
-        std::cout << "task" << i + j << "done...\n";
+        int idx = str_config.find_first_of('=');
+        if(idx != -1)
+        {
+            if(str_config.substr(0, idx) == "userName")
+            {
+                user_name = str_config.substr(idx + 1, str_config.size());
+            }
+            else if(str_config.substr(0, idx) == "pwd")
+            {
+                pwd = str_config.substr(idx + 1, str_config.size());
+            }
+            else if(str_config.substr(0, idx) == "databaseName")
+            {
+                databaseName = str_config.substr(idx + 1, str_config.size());
+            }
+        }
     }
+
+    return true;
 }
 
 int main()
 {
-    threadPool tp(2);
-
-    for (int i = 0; i < 10; ++i)
+    // 从配置文件读取需要的数据
+    if(!getconfig())
     {
-        /*tp.append([i]() {
-            {
-                std::unique_lock<std::mutex> ulock(mtx_io);
-                std::cout << "task" << i << "begin to work...\n";
-            }
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-            {
-                std::unique_lock<std::mutex> ulock(mtx_io);
-                std::cout << "task" << i << "done...\n";
-            }
-            });*/
-
-        tp.append_task(func, i, 10);
+        return EXIT_FAILURE;
     }
+
+#ifdef DEBUG
+    std::cout << "== config message ==\n";
+    std::cout << "user_name: " << user_name << '\n';
+    std::cout << "pwd: " << pwd << '\n';
+    std::cout << "databaseName: " << databaseName << '\n';
+    std::cout << "== config end ==\n";
+#endif
+
+    WebServer webserver;
 
     return 0;
 }
