@@ -13,8 +13,8 @@ public:
     bool releaseConnection(MYSQL*);         /* 释放SQL连接对象 */
     
     // 初始化SQL连接池
-    bool init(int cnt, std::string addr, std::string port, 
-                std::string userName, std::string pwd, std::string databaseName);
+    bool init(int num, std::string addr, std::string port, 
+                std::string userName, std::string pwd, std::string dbName);
 
     // 可以有多个SQL连接池，每个池对应一个数据库，方便分库分表
     static sqlConnectPool* CreateSqlConnectPool();
@@ -33,11 +33,12 @@ private:
 
     std::list<MYSQL*> connect_lists;
     
-    std::string host_add;           /* 主机地址 */
+    std::string host_addr;           /* 主机地址 */
     std::string host_port;          /* 主机端口号 */
     std::string db_userName;        /* 数据库用户名 */
     std::string db_pwd;             /* 数据库密码 */
-    std::string db_BatabaseName;    /* 使用的数据库名 */
+    std::string db_databaseName;    /* 使用的数据库名 */
+    int sql_num;            /* sql连接池中的sql对象数量 */
 };
 
 #endif

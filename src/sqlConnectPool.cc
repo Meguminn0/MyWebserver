@@ -2,8 +2,7 @@
 
 struct MYSQL* sqlConnectPool::getSqlConnection()
 {
-    MYSQL *mysql = nullptr;
-    return mysql;
+    return nullptr;
 }
 
 bool sqlConnectPool::releaseConnection(MYSQL *mysql)
@@ -11,16 +10,29 @@ bool sqlConnectPool::releaseConnection(MYSQL *mysql)
     return true;
 }
 
-bool sqlConnectPool::init(int cnt, std::string addr, std::string port, 
-            std::string userName, std::string pwd, std::string databaseName)
+bool sqlConnectPool::init(int num, std::string addr, std::string port, 
+            std::string userName, std::string pwd, std::string dbName)
 {
+    sql_num = num;
+    host_addr = addr;
+    host_port = port;
+    db_userName = userName;
+    db_pwd = pwd;
+    db_databaseName = dbName;
+
+    for(int i = 0; i < sql_num; ++i)
+    {
+
+    }
+
     return true;
 }
 
 
 sqlConnectPool* sqlConnectPool::CreateSqlConnectPool()
 {
-    return nullptr;
+    sqlConnectPool *sqlPool = new sqlConnectPool();
+    return sqlPool;
 }
 
 sqlConnectPool::~sqlConnectPool()
