@@ -4,10 +4,12 @@
 #include "my_threadPool.h"
 #include "sqlConnectPool.h"
 
+#include "debug.h"
+
 class WebServer
 {
 public:
-    WebServer();
+    inline WebServer() : sql_pool(nullptr), thd_Pool(nullptr) { }
     ~WebServer();
 
     // WebServer 基础信息初始化
@@ -19,12 +21,12 @@ public:
 
     void init_thread_pool(int threadsNum);
 
+    sqlConnectPool* sql_pool;           /* 数据库连接池指针 */
 private:
     // webserver相关变量
     int web_port;       /* web服务所在的端口号 */
 
     // 数据库相关变量
-    sqlConnectPool* sql_pool;           /* 数据库连接池指针 */
     std::string sql_addr;               /* 数据库地址，默认为 localhost */
     std::string sql_port;               /* 数据库端口，默认为 3306 */
     std::string sql_userName;           /* 数据库用户名 */

@@ -1,33 +1,40 @@
 #ifndef __MYSQL_DATABASE_H__
 #define __MYSQL_DATABASE_H__
 
+#include <iostream>
 #include <string>
 #include <mysql/mysql.h>
+
+#include "debug.h"
+// #define DEBUG
 
 // mysql数据库封装类
 class mysql_database
 {
 public:
-    mysql_database(std::string username, std::string pwd, std::string dbName);
-    mysql_database(std::string username, std::string pwd, std::string dbName, std::string addr, std::string port);
+    mysql_database(std::string username, std::string pwd, std::string dbName) noexcept;
+    mysql_database(std::string username, std::string pwd, std::string dbName, std::string host, std::string port) noexcept;
     ~mysql_database();
 
     // 数据库连接
     bool connect();
-    // 表中字段查询
-    bool getTableFeild(std::string tableName);
+    // 查询表中字段数
+    long getTableFieldNum(std::string tableName);
     // 表查询
     bool show_table(std::string tableName);
-    // 自由执行命令
-    bool freedom_order(std::string sentence);
+    // 插入输入
+    bool add(std::string add_sentence);
 
-    std::string* getResult();
+protected:
+    void show_select();
 
 private:
-    MYSQL* _mysql;      /* mysql对象 */
-    bool _conntStatus;  /* 连接状态 */
+    MYSQL* _mysql;              /* mysql对象 */
+    bool _conntStatus;          /* 连接状态 */
+    MYSQL_RES* _res;            /* 查询结果集 */
+    MYSQL_ROW _row;             /* 数据行 */
 
-    std::string m_addr;           /* 主机地址 */
+    std::string m_host;           /* 主机地址 */
     std::string m_port;           /* 主机端口号 */
     std::string m_userName;       /* 数据库用户名 */
     std::string m_pwd;            /* 数据库密码 */

@@ -3,42 +3,49 @@
 
 #include <list>
 #include <string>
+#include <mutex>
+#include <condition_variable>
 #include <mysql/mysql.h>
+
+#include "mysql_database.h"
+#include "debug.h"
 
 // SQL连接池，这里使用的是 mySQL
 class sqlConnectPool
 {
 public:
-    struct MYSQL* getSqlConnection();              /* 获取池中的SQL连接对象 */
-    bool releaseConnection(MYSQL*);         /* 释放SQL连接对象 */
+    mysql_database* getConnection();            /* 获取池中的SQL连接对象 */
+    bool releaseConnection(mysql_database*);    /* 释放SQL连接对象 */
     
     // 初始化SQL连接池
-    bool init(int num, std::string addr, std::string port, 
+    void init(int num, std::string addr, std::string port, 
                 std::string userName, std::string pwd, std::string dbName);
-
-    // 可以有多个SQL连接池，每个池对应一个数据库，方便分库分表
-    static sqlConnectPool* CreateSqlConnectPool();
-
-protected:
-    inline sqlConnectPool() { }
-    ~sqlConnectPool();
 
     // 销毁连接池
     void destroyPool();
+    // 单例模式
+    static sqlConnectPool* getSqlPool();
 
+    ~sqlConnectPool();
 private:
+    inline sqlConnectPool() : sql_inPoolNum(0), poolClose(false) { }
     sqlConnectPool(const sqlConnectPool&) = delete;
     sqlConnectPool& operator=(const sqlConnectPool&) = delete;
 
 
-    std::list<MYSQL*> connect_lists;
+    std::list<mysql_database*> connect_lists;
     
-    std::string host_addr;           /* 主机地址 */
-    std::string host_port;          /* 主机端口号 */
+    std::string host;               /* 主机地址 */
+    std::string port;               /* 主机端口号 */
     std::string db_userName;        /* 数据库用户名 */
     std::string db_pwd;             /* 数据库密码 */
     std::string db_databaseName;    /* 使用的数据库名 */
-    int sql_num;            /* sql连接池中的sql对象数量 */
+    int sql_maxNum;                 /* sql连接池中的sql对象最大数量 */
+    int sql_inPoolNum;              /* 在 sql 连接池中的sql数量 */
+
+    std::mutex list_mtx;            /* sql连接池互斥量 */
+    std::condition_variable cv;
+    bool poolClose;
 };
 
 #endif

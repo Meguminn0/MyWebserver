@@ -1,14 +1,10 @@
 #include "webserver.h"
 
-WebServer::WebServer()
-{
-
-}
-
 WebServer::~WebServer()
 {
-
+    delete thd_Pool;
 }
+
 void WebServer::init_web(int webPort)
 {
     web_port = webPort;
@@ -25,7 +21,7 @@ void WebServer::init_sql(int sqlNum, std::string sqlUserName, std::string sqlPwd
     sql_pwd = sqlPwd;
     sql_databaseName = databasesName;
 
-    sql_pool = sqlConnectPool::CreateSqlConnectPool();
+    sql_pool = sqlConnectPool::getSqlPool();
     sql_pool->init(sqlPool_sqlNum, sql_addr, sql_port, sql_userName, sql_pwd, sql_databaseName);
 }
 

@@ -22,4 +22,4 @@ add_executable(${EXE_NAME} ${SRC})
 
 target_include_directories(${EXE_NAME} PUBLIC /usr/include/mysql)
 
-target_link_libraries(${EXE_NAME} pthread)
+target_link_libraries(${EXE_NAME} pthread ${MYSQL_LIBRARY})
