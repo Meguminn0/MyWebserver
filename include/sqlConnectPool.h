@@ -23,6 +23,7 @@ public:
 
     // 销毁连接池
     void destroyPool();
+    
     // 单例模式
     static sqlConnectPool* getSqlPool();
 
