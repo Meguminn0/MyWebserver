@@ -20,7 +20,13 @@ int main()
                 cfg.sqlDatabaseName, cfg.sqlHost, cfg.sqlPort);
     
     // 线程池初始化
-    webserver.init_thread_pool(8);
+    webserver.init_thread_pool(6);
+
+    // 打开监听
+    webserver.WebListen();
+    
+    // 运行
+    webserver.eventLoop();
 
     return 0;
 }

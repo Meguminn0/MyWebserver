@@ -54,7 +54,7 @@ bool config::getconfig()
                 webPort = str_config.substr(idx + 1, str_config.size());
                 if(webPort == DEFAULT_VALUE)
                 {
-                    webPort = "20024";
+                    webPort = "2024";
                 }
             }
             else if(str_config.substr(0, idx) == "sqlHost")

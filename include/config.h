@@ -18,7 +18,7 @@ public:
 
     // web信息
     std::string webIP = "0";                /* web服务器IP，0为默认值，由系统决定 */
-    std::string webPort = "20024";          /* web服务器端口, 0为默认值: 20024*/
+    std::string webPort = "2024";          /* web服务器端口, 0为默认值: 2024*/
 
     // 数据库信息
     std::string sqlHost = "localhost";      /* 数据库地址，0为默认值： localhost */

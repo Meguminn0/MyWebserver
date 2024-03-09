@@ -15,32 +15,38 @@
 
 #include "my_threadPool.h"
 #include "sqlConnectPool.h"
+#include "http_connect.h"
 
 #include "debug.h"
 
-#define MAX_EPOLLEVENT_NUM 4096
+#define MAX_EPOLLEVENT_NUM 4096     // 最大epoll事件数
+#define MAX_FD 65536             // 最大文件描述符
 
 class WebServer
 {
 public:
-    inline WebServer() { }
+    WebServer();
     ~WebServer();
 
     // WebServer 基础信息初始化
     void init_web(std::string webIP, std::string webPort);
-
     // WebServer 数据库连接初始化
     void init_sql(int sqlNum, std::string sqlUserName, std::string sqlPwd, std::string databasesName, 
                     std::string sqlAddr, std::string sqlPort);
-
     // WebServer 线程池初始化
     void init_thread_pool(int threadsNum);
-
     // 网络监听
     void WebListen();
-
     // 循环处理监听事件
     void eventLoop();
+    // 处理客户端连接请求
+    bool doClientRequest();
+    // 关闭客户端连接
+    void closeConnect(int sockfd);
+    // 读取客户端数据
+    void doClientRead(int sockfd);
+    // 向客户端发送数据
+    void doClientWrite(int sockfd);
 
 private:
     // 内部封装的函数
@@ -68,6 +74,9 @@ private:
     int sockfd_listen = -1;
     int epollfd = -1;
     struct epoll_event epollEvents[MAX_EPOLLEVENT_NUM];
+
+    // http
+    http_connect *httpUser;
 };
 
 #endif

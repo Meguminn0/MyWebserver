@@ -1,5 +1,10 @@
 #include "webserver.h"
 
+WebServer::WebServer()
+{
+    httpUser = new http_connect[MAX_FD];
+}
+
 WebServer::~WebServer()
 {
     delete thd_Pool;
@@ -85,6 +90,8 @@ void WebServer::WebListen()
 #endif
         exit(EXIT_FAILURE);
     }
+
+
     epoll_addfd(sockfd_listen, false, 0);
 }
 
@@ -123,7 +130,7 @@ void WebServer::eventLoop()
     while(!stop_server)
     {
         int eventNum = epoll_wait(epollfd, epollEvents, MAX_EPOLLEVENT_NUM, -1);
-        if(eventNum < 0 && errno != EINTR)
+        if(eventNum == -1)
         {
 #ifdef DEBUG
             printf("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
@@ -131,5 +138,70 @@ void WebServer::eventLoop()
 #endif
             break;
         }
+        
+        for(int i = 0; i < eventNum; ++i)
+        {
+            int sockfd = epollEvents[i].data.fd;
+            
+            if(sockfd == sockfd_listen)
+            {
+#ifdef DEBUG
+                printf("%s\n", "客户端已连接！");
+#endif
+                // 处理客户端连接请求
+                bool flag = doClientRequest();
+                if(flag = false)
+                {
+                    continue;
+                }
+            }
+            else if(epollEvents[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
+            {
+                // 如果对方 读关闭|挂断连接|出现异常，关闭连接
+                closeConnect(sockfd);
+            }
+            else if(epollEvents[i].events & EPOLLIN)
+            {
+                doClientRead(sockfd);
+            }
+            else if(epollEvents[i].events & EPOLLOUT)
+            {
+                doClientWrite(sockfd);
+            }
+        }
     }
+}
+
+bool WebServer::doClientRequest()
+{
+    struct sockaddr_in client_addr;
+    socklen_t client_addrLen = sizeof(client_addr);
+    int sockfd_client = accept(sockfd_listen, (struct sockaddr*)&client_addr, &client_addrLen);
+    if(sockfd_client == -1)
+    {
+#ifdef DEBUG
+        printf("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
+                __FILE__, __func__, __LINE__, "accept error!");
+#endif
+        return false;
+    }
+    
+    httpUser[sockfd_client].init(sockfd_client, client_addr, nullptr, sql_userName, sql_pwd, sql_databaseName);
+
+    return true;
+}
+
+void WebServer::closeConnect(int sockfd)
+{
+
+}
+
+void WebServer::doClientRead(int sockfd)
+{
+
+}
+
+void WebServer::doClientWrite(int sockfd)
+{
+
 }
