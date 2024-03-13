@@ -2,7 +2,8 @@
 
 WebServer::WebServer()
 {
-    httpUser = new http_connect[MAX_FD];
+    http_user = new http_connect[MAX_FD];
+    http_root = "../root/";
 }
 
 WebServer::~WebServer()
@@ -162,10 +163,12 @@ void WebServer::eventLoop()
             }
             else if(epollEvents[i].events & EPOLLIN)
             {
+                // 处理客户端发送的数据
                 doClientRead(sockfd);
             }
             else if(epollEvents[i].events & EPOLLOUT)
             {
+                // 向客户端发送数据
                 doClientWrite(sockfd);
             }
         }
@@ -186,7 +189,7 @@ bool WebServer::doClientRequest()
         return false;
     }
     
-    httpUser[sockfd_client].init(sockfd_client, client_addr, nullptr, sql_userName, sql_pwd, sql_databaseName);
+    http_user[sockfd_client].init(sockfd_client, client_addr, sql_pool, http_root, sql_userName, sql_pwd, sql_databaseName);
 
     return true;
 }
@@ -198,10 +201,19 @@ void WebServer::closeConnect(int sockfd)
 
 void WebServer::doClientRead(int sockfd)
 {
-
+    // 处理客户端发来的数据
+    // 将客户端对应的http对象的数据处理状态设为读取状态
+    http_user[sockfd].m_RWStat = http_connect::HTTP_READ_STATUS;
+    // 将读取任务放入线程池中执行
+    thd_Pool->append_task(read_work, &http_user[sockfd]);
 }
 
 void WebServer::doClientWrite(int sockfd)
 {
 
+}
+
+void WebServer::read_work(http_connect* http)
+{
+    http->read(); 
 }

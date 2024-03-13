@@ -48,6 +48,8 @@ public:
     // 向客户端发送数据
     void doClientWrite(int sockfd);
 
+    static void read_work(http_connect* http);
+
 private:
     // 内部封装的函数
     int setnonblocking(int fd);    /* sockfd设置为非阻塞模式 */
@@ -76,7 +78,8 @@ private:
     struct epoll_event epollEvents[MAX_EPOLLEVENT_NUM];
 
     // http
-    http_connect *httpUser;
+    http_connect *http_user;
+    std::string http_root;           /* http网页目录路径 */
 };
 
 #endif
