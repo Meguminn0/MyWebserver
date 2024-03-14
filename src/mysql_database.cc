@@ -164,7 +164,7 @@ bool mysql_database::show_table(std::string tableName)
     {
         for(int i = 0; i < fieledNum; ++i)
         {
-            printf("%-5s\t", _row[i]);
+            printf("%-10s\t", _row[i]);
         }
         puts("");
     }
@@ -193,4 +193,27 @@ bool mysql_database::add(std::string add_sentence)
     }
     
     return true;
+}
+
+MYSQL_RES* mysql_database::inquire(std::string quire_sentence)
+{
+    if(_conntStatus = false)
+    {
+#ifdef DEBUG
+        printf("[%s %s] %s:%s:(%ld) %s\n", __DATE__, __TIME__, __FILE__, __FUNCTION__, __LINE__, 
+                    "DataBase not connected!");
+#endif
+        return nullptr;
+    }
+
+    if(mysql_query(_mysql, quire_sentence.c_str()))
+    {
+#ifdef DEBUG
+        printf("[%s %s] %s:%s:(%ld) %s %s\n", __DATE__, __TIME__, __FILE__, __FUNCTION__, __LINE__, 
+                    "mysql query failed:", mysql_error(_mysql));
+#endif
+        return nullptr;
+    }
+
+    return mysql_store_result(_mysql);
 }

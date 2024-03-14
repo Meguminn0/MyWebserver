@@ -22,8 +22,10 @@ public:
     long getTableFieldNum(std::string tableName);
     // 表查询
     bool show_table(std::string tableName);
-    // 插入输入
+    // 插入数据
     bool add(std::string add_sentence);
+    // 任意查询，返回结果集
+    MYSQL_RES* inquire(std::string quire_sentence);
 
 protected:
     void show_select();

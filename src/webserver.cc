@@ -3,7 +3,7 @@
 WebServer::WebServer()
 {
     http_user = new http_connect[MAX_FD];
-    http_root = "../root/";
+    http_root = "./Root";
 }
 
 WebServer::~WebServer()
@@ -143,11 +143,11 @@ void WebServer::eventLoop()
         for(int i = 0; i < eventNum; ++i)
         {
             int sockfd = epollEvents[i].data.fd;
-            
             if(sockfd == sockfd_listen)
             {
 #ifdef DEBUG
-                printf("%s\n", "客户端已连接！");
+               printf("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
+                __FILE__, __func__, __LINE__, "客户端已连接");
 #endif
                 // 处理客户端连接请求
                 bool flag = doClientRequest();
@@ -210,7 +210,7 @@ void WebServer::doClientRead(int sockfd)
 
 void WebServer::doClientWrite(int sockfd)
 {
-
+    printf("%s\n", "写了");
 }
 
 void WebServer::read_work(http_connect* http)

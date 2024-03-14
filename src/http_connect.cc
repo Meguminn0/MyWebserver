@@ -50,7 +50,9 @@ void http_connect::init()
     m_currentURL = nullptr;
     m_head_connectionVal = false;
     m_head_hostVal = nullptr;
-    m_content_str = nullptr;
+    m_content_text = nullptr;
+    m_file_address = nullptr;
+    m_requestFile = m_rootPath;
 }
 
 int http_connect::setnonblock(int fd)
@@ -68,9 +70,34 @@ void http_connect::read()
     {
         // 读取成功，开始解析数据
         mysqlDB = sql_pool->getConnection();
-        HTTP_CODE parse_ret = read_parse();
-        
+        HTTP_CODE readParse_ret = read_parse();
+         if (readParse_ret == NO_REQUEST)
+        {
+            modfd(epollfd, m_sockfd, EPOLLIN, 0);
+            return;
+        }
+
+        // 读取的数据全部解析完成，开始写入数据并发送给客户端
+        bool writeParse_ret = write_parse(readParse_ret);
+        if (!writeParse_ret)
+        {
+            close_conn();
+        }
+        modfd(epollfd, m_sockfd, EPOLLOUT, 0);
     }
+}
+
+void http_connect::modfd(int epollfd, int fd, int ev, int TRIGMode)
+{
+    epoll_event event;
+    event.data.fd = fd;
+
+    if (1 == TRIGMode)
+        event.events = ev | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
+    else
+        event.events = ev | EPOLLONESHOT | EPOLLRDHUP;
+
+    epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &event);
 }
 
 bool http_connect::read_once()
@@ -226,7 +253,7 @@ http_connect::HTTP_CODE http_connect::parse_request_line(char *lineBegin)
     // strspn(s1,s2)用于查找s1后第一个与不在s2出现的字符下标
     // 如："   1s12s23 "后第一个不在" "中出现的字符是"1"，返回下标为 3
     tmp += strspn(tmp, " ");
-    // 此时tmp指向的是请求行的第二个字符串的第一个字符：URL
+    // 此时tmp指向的是请求行的第二个字符串：URL
     m_currentURL = tmp;
     // 找到第二个空格位置
     tmp = strpbrk(tmp, " ");
@@ -319,16 +346,172 @@ http_connect::HTTP_CODE http_connect::parse_content(char *lineBegin)
     // 因为每次调用read_parse时，循环一直满足m_check_state == CHECK_STATE_CONTENT && lineStatus == LINE_OK
     if(m_read_idx >= (m_content_len + m_check_idx))
     {
-        // 当检查到请求数据的最会一个字符时，设置结束符，并保存请求数据的内容
+        // 当检查到请求数据的最后一个字符时，设置结束符，并保存请求数据的内容
         lineBegin[m_content_len] = '\0';
-        m_content_str = lineBegin;
+        m_content_text = lineBegin;
         return GET_REQUEST;
     }
 
     return NO_REQUEST;
 }
 
+/*
+ 收到客户端完整的请求，对请求数据做出判断
+ .找到客户端请求的html文件所在目录
+ .到数据库中验证客户端传来的用户名和密码
+*/
 http_connect::HTTP_CODE http_connect::do_request()
 {
+#ifdef DEBUG
+    std::cout << "requestFile: " << m_requestFile << std::endl;
+#endif
 
+    // 如果是登录或者注册页面提交的数据，需要对用户名和密码进行验证，然后决定最中需要返回给客户端的html页面
+    // 提取用户名和密码 user=123&passwd=123
+    if(m_currentMethod == POST && (strcasecmp(m_currentURL + 1, "loginError.html") == 0 || 
+                                    strcasecmp(m_currentURL + 1, "registerError.html") == 0))
+    {
+        std::string sentence;
+        std::string name, pwd;
+        int i = 5;
+        while(m_content_text[i] != '&') 
+            ++i;
+        m_content_text[i] = '\0';
+        name = &m_content_text[5];
+        pwd = &m_content_text[i + 8];
+
+        // 如果是登录，查询用户名和密码是否正确
+        if(strcasecmp(m_currentURL + 1, "loginError.html") == 0)
+        {
+            sentence = "select username, passwd from  user where username=\"";
+            sentence.append(name);
+            sentence.append("\" && passwd=\"");
+            sentence.append(pwd);
+            sentence.append("\";");
+            MYSQL_RES *res = mysqlDB->inquire(sentence);
+            if(!res)
+            {
+#ifdef DEBUG
+                std::cout << "inquire error" << std::endl;
+#endif
+                return BAD_REQUEST;
+            }
+            //返回结果集中的列数
+            int num_fields = mysql_num_fields(res);
+
+            //返回所有字段结构的数组
+            MYSQL_FIELD *fields = mysql_fetch_fields(res);
+
+            //从结果集中获取一行(因为同一个用户名只能有一个用户使用)，将对应的用户名和密码，进行比较
+            MYSQL_ROW row = mysql_fetch_row(res);
+            if(row && name == row[0] && pwd == row[1])
+            {
+                // 有这个用户
+                // 指定返回给客户端的html文件
+                m_requestFile += "/welcome.html";
+            }
+            else
+            {
+                // 没有这个用户
+                // 指定返回给客户端的html文件
+                m_requestFile += "/loginError.html";
+            }
+        }
+        else if(strcasecmp(m_currentURL + 1, "registerError.html") == 0)
+        {
+            // 如果是注册，先查找用户名是否被占用
+            sentence = "select username from  user where username=\"";
+            sentence.append(name);
+            sentence.append("\"");
+            MYSQL_RES *res = mysqlDB->inquire(sentence);
+            if(!res)
+            {
+#ifdef DEBUG
+                std::cout << "inquire error" << std::endl;
+#endif
+                return BAD_REQUEST;
+            }
+            //返回结果集中的列数
+            int num_fields = mysql_num_fields(res);
+
+            //返回所有字段结构的数组
+            MYSQL_FIELD *fields = mysql_fetch_fields(res);
+
+            //从结果集中获取一行，如果有数据，说明该用户名已存在
+            MYSQL_ROW row = mysql_fetch_row(res);
+            if(name == row[0])
+            {
+                // 有这个用户
+                // 指定返回给客户端的html文件
+                m_requestFile += "/registerError.html";
+            }
+            else
+            {
+                // 没有这个用户,将用户名和密码放到数据库中
+                sentence = "insert into user value(\"";
+                sentence.append(name);
+                sentence.append("\", \"");
+                sentence.append(pwd);
+                sentence.append("\");");
+                if(!mysqlDB->add(sentence))
+                {
+#ifdef DEBUG
+                std::cout << "sql add error" << std::endl;
+#endif
+                return BAD_REQUEST;
+                }
+
+                // 指定返回给客户端的html文件
+                m_requestFile += "/judge.html";
+            }
+        } 
+    }
+    
+    // 如果URL并不是登录也不是注册页面，直接指定用户请求的页面文件
+    m_requestFile += m_currentURL;
+
+    // 判断页面文件的状态
+    if(stat(m_requestFile.c_str(), &m_file_stat) == -1)
+    {
+        // 失败，返回没有该文件
+        return NO_RESOURCE;
+    }
+    if(!(m_file_stat.st_mode & S_IROTH))
+    {
+        // 文件不可读可读
+        return FORBIDDEN_REQUEST;
+    }
+    if(S_ISDIR(m_file_stat.st_mode))
+    {
+        // 该文件是一个目录
+        return BAD_REQUEST;
+    }
+    
+    // 将html文件映射到内存中
+    int fd = open(m_requestFile.c_str(), O_RDONLY);
+    m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+
+    return FILE_REQUEST;
+}
+
+bool http_connect::write_parse(HTTP_CODE readRet)
+{
+    if(readRet == INTERNAL_ERROR)
+    {
+
+    }
+
+    return true;
+}
+
+void http_connect::close_conn(bool real_close)
+{
+    if (real_close && (m_sockfd != -1))
+    {
+        printf("close %d\n", m_sockfd);
+        epoll_ctl(epollfd, EPOLL_CTL_DEL, m_sockfd, 0);
+        close(m_sockfd);
+        m_sockfd = -1;
+    }
 }

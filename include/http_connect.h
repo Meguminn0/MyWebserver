@@ -10,14 +10,15 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
-#include <assert.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
 
 #include "sqlConnectPool.h"
 
 class http_connect
 {
 public:
+    static const int FILE_LENTH = 1024;
     static const int HTTP_READ_STATUS = 0;      /* http数据读取状态 */
     static const int HTTP_WRITE_STATUS = 1;     /* http数据读取状态 */
     static const int READBUFF_MAX_LEN = 2048;   /* 读取数据的最大长度 */
@@ -58,11 +59,11 @@ public:
      NO_REQUEST             无请求
      GET_REQUEST            获得请求
      BAD_REQUEST            错误的请求
-     NO_RESOURCE            
-     FORBIDDEN_REQUEST
-     FILE_REQUEST
-     INTERNAL_ERROR
-     CLOSED_CONNECTION
+     NO_RESOURCE            请求文件不存在       
+     FORBIDDEN_REQUEST      请求文件不可读
+     FILE_REQUEST           请求文件准备就绪
+     INTERNAL_ERROR         内部错误
+     CLOSED_CONNECTION      
     */
     enum HTTP_CODE
     {
@@ -112,6 +113,8 @@ public:
     void read();
 
 private:
+    //将事件重置为EPOLLONESHOT
+    void modfd(int epollfd, int fd, int ev, int TRIGMode);
     // 读取一次客户端发来的数据，可能不会一次性读取完
     bool read_once();
     // 解析读取的内容
@@ -126,6 +129,11 @@ private:
     HTTP_CODE parse_content(char *lineBegin);
     // 做出请求响应
     HTTP_CODE do_request();
+
+    // 解析要写入发送的数据
+    bool write_parse(HTTP_CODE readRet);
+    // 关闭连接
+    void close_conn(bool real_close = true);
 
 public:
     static int epollfd;
@@ -146,10 +154,13 @@ private:
     char* m_currentURL;                 /* 当前http请求的 URL */
     bool m_head_connectionVal;          /* 请求头部的connection字段值，值为keep-alive时为 true,否则为false */
     char* m_head_hostVal;               /* 请求头部的host字段值 */
-    char* m_content_str;                /* 当前http请求的请求数据内容 */
+    char* m_content_text;               /* 当前http请求的请求数据内容 */
     long long m_content_len;            /* 当前http请求的请求数据长度 */
+    std::string m_requestFile;          /* 返回给客户端的html页面文件 */
+    struct stat m_file_stat;            /* 返回给客户端的html页面文件状态 */
+    char *m_file_address;               /* 返回给客户但的html页面文件在内存中的映射地址 */
 
-    std::string m_rootPath;
+    std::string m_rootPath;             /* http网页文件目录 */
 
     // sal连接变量
     sqlConnectPool *sql_pool;
