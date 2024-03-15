@@ -42,6 +42,8 @@ void http_connect::init()
     m_check_idx = 0;
     m_line_idx = 0;
     m_content_len = 0;
+    need_to_sent = 0;
+    has_been_sent = 0;
     memset(readBuff, 0, READBUFF_MAX_LEN);
     memset(writeBuff, 0, WRITEBUFF_MAX_LEN);
 
@@ -84,6 +86,61 @@ void http_connect::read()
             close_conn();
         }
         modfd(epollfd, m_sockfd, EPOLLOUT, 0);
+    }
+}
+
+void http_connect::write()
+{
+    if(need_to_sent == 0)
+    {
+        // 如果没有需要发送的数据，直接返回
+        modfd(epollfd, m_sockfd, EPOLLIN, 0);
+        // 重置http状态
+        init();
+        return;
+    }
+
+    while(true)
+    {
+        int sz = writev(m_sockfd, m_iov, iovLen);
+        if(sz == -1)
+        {
+            if(errno == EAGAIN)
+            {
+                modfd(epollfd, m_sockfd, EPOLLOUT, 0);
+                return;
+            }
+            unmap();
+            return;
+        }
+        has_been_sent += sz;
+        need_to_sent -= sz;
+        // 如果一次没法送完，更新下一次发送的起始地址
+        if(need_to_sent >= m_iov[0].iov_len)
+        {
+            m_iov[0].iov_base = nullptr;
+            m_iov[1].iov_base = m_file_address + (has_been_sent - m_write_idx);
+            m_iov[1].iov_len = need_to_sent;
+        }
+        else
+        {
+            m_iov[0].iov_base = writeBuff + has_been_sent;
+            m_iov[0].iov_len = m_write_idx - has_been_sent;
+        }
+
+        // 如果发送完，释放html文件在内存中的映射，并修改sockfd在epoll中的状态
+        if(need_to_sent <= 0)
+        {
+            unmap();
+            modfd(epollfd, m_sockfd, EPOLLIN, 0);
+            // 如果要保持链接，初始化http状态
+            if(m_head_connectionVal)
+            {
+                init();
+                return;
+            }
+            return;
+        }
     }
 }
 
@@ -495,12 +552,79 @@ http_connect::HTTP_CODE http_connect::do_request()
     return FILE_REQUEST;
 }
 
+void http_connect::unmap()
+{
+    // 如果heml文件在内存中有映射地址
+    if(m_file_address)
+    {
+        munmap(m_file_address, m_file_stat.st_size);
+        m_file_address = 0;
+    }
+}
+
 bool http_connect::write_parse(HTTP_CODE readRet)
 {
     if(readRet == INTERNAL_ERROR)
     {
-
+        add_status_line(500, error_500_title);
+        add_headers(strlen(error_500_form));
+        if(!add_content(error_500_form))
+        {
+            // 如果失败了直接返回
+            return false;
+        }
     }
+    else if(readRet == BAD_REQUEST)
+    {
+        add_status_line(404, error_404_title);
+        add_headers(strlen(error_404_form));
+        if(!add_content(error_404_form))
+        {
+            // 如果失败了直接返回
+            return false;
+        }
+    }
+    else if(readRet == FORBIDDEN_REQUEST)
+    {
+        add_status_line(403, error_403_title);
+        add_headers(strlen(error_403_form));
+        if(!add_content(error_403_form))
+        {
+            // 如果失败了直接返回
+            return false;
+        }
+    }
+    else if(readRet == FILE_REQUEST)
+    {
+        add_status_line(200, ok_200_title);
+        if(m_file_stat.st_size != 0)
+        {
+            add_headers(m_file_stat.st_size);
+            // 将writeBuff和html文件在内存中的地址保存在io向量中
+            m_iov[0].iov_base = writeBuff;
+            m_iov[0].iov_len = m_write_idx;
+            m_iov[1].iov_base = m_file_address;
+            m_iov[1].iov_len = m_file_stat.st_size;
+            iovLen = 2;
+            need_to_sent = m_write_idx + m_file_stat.st_size;
+        }
+        else
+        {
+            const char *ok_string = "<html><body>empty</body></html>";
+            add_headers(strlen(ok_string));
+            if (!add_content(ok_string))
+                return false;
+        }
+    }
+    else
+    {
+        return false;
+    }
+
+    m_iov[0].iov_base = writeBuff;
+    m_iov[0].iov_len = m_write_idx;
+    iovLen = 1;
+    need_to_sent = m_write_idx;
 
     return true;
 }
@@ -514,4 +638,61 @@ void http_connect::close_conn(bool real_close)
         close(m_sockfd);
         m_sockfd = -1;
     }
+}
+
+bool http_connect::add_status_line(int status, const char *title)
+{
+    return add_writeBuff("%s %d %s\r\n", "HTTP/1.1", status, title);
+}
+
+bool http_connect::add_headers(int content_len)
+{
+    return add_content_lengthVal(content_len) && 
+            add_connectionVal() &&
+            add_blank_line();
+}
+
+bool http_connect::add_content_lengthVal(int content_len)
+{
+    return add_writeBuff("Content-Length: %d\r\n", content_len);
+}
+
+bool http_connect::add_connectionVal()
+{
+    return add_writeBuff("Connection: %s\r\n",
+            ( m_head_connectionVal == true) ? "keep-alive" : "close");
+}
+
+bool http_connect::add_blank_line()
+{
+    return add_writeBuff("\r\n");
+}
+
+bool http_connect::add_content(const char *content)
+{
+    return add_writeBuff("%s", content);
+}
+
+bool http_connect::add_writeBuff(const char* format, ...)
+{
+    // 如果缓冲区写满了，不再继续写入，等待数据发送。
+    if(m_write_idx >= WRITEBUFF_MAX_LEN)
+    {
+        return false;
+    }
+    va_list argv;
+    va_start(argv, format);
+    // 将类似sprintf, 将format与argv中的数据写入writebuff中
+    int len = vsnprintf(writeBuff + m_write_idx, 
+                    WRITEBUFF_MAX_LEN - 1 - m_write_idx, format, argv);
+    if(len >= WRITEBUFF_MAX_LEN - 1 - m_write_idx)
+    {
+        // 如果format与argv数据的长度大于了writebuff剩余的大小，直接返回
+        va_end(argv);
+        return false;
+    }
+    m_write_idx += len;
+    va_end(argv);
+
+    return true;
 }

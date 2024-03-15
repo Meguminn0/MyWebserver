@@ -151,7 +151,7 @@ void WebServer::eventLoop()
 #endif
                 // 处理客户端连接请求
                 bool flag = doClientRequest();
-                if(flag = false)
+                if(flag == false)
                 {
                     continue;
                 }
@@ -163,11 +163,17 @@ void WebServer::eventLoop()
             }
             else if(epollEvents[i].events & EPOLLIN)
             {
+#ifdef DEBUG
+                printf("%s\n", "passR");
+#endif
                 // 处理客户端发送的数据
                 doClientRead(sockfd);
             }
             else if(epollEvents[i].events & EPOLLOUT)
             {
+#ifdef DEBUG
+                printf("%s\n", "passW");
+#endif
                 // 向客户端发送数据
                 doClientWrite(sockfd);
             }
@@ -196,7 +202,11 @@ bool WebServer::doClientRequest()
 
 void WebServer::closeConnect(int sockfd)
 {
-
+#ifdef DEBUG
+    printf("%s\n", "close");
+#endif
+    epoll_ctl(epollfd, EPOLL_CTL_DEL, sockfd, 0);
+    close(sockfd);
 }
 
 void WebServer::doClientRead(int sockfd)
@@ -210,10 +220,20 @@ void WebServer::doClientRead(int sockfd)
 
 void WebServer::doClientWrite(int sockfd)
 {
-    printf("%s\n", "写了");
+    // 将准备好的数据发送给客户端
+    // 将客户端对应的http对象的数据处理状态设为写入状态
+    http_user[sockfd].m_RWStat = http_connect::HTTP_WRITE_STATUS;
+    // 将写入任务放入线程池中执行
+    thd_Pool->append_task(write_work, &http_user[sockfd]);
 }
 
 void WebServer::read_work(http_connect* http)
 {
     http->read(); 
+}
+
+
+void WebServer::write_work(http_connect* http)
+{
+    http->write();
 }

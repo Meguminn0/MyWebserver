@@ -49,6 +49,7 @@ public:
     void doClientWrite(int sockfd);
 
     static void read_work(http_connect* http);
+    static void write_work(http_connect* http);
 
 private:
     // 内部封装的函数
