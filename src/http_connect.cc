@@ -8,7 +8,7 @@ void http_connect::init(int fd, const struct sockaddr_in &addr, sqlConnectPool *
     m_sockfd = fd;
     m_sockfd_addr = addr;
 
-    addfd(epollfd, m_sockfd, false);
+    addfd(epollfd, m_sockfd, true);
 
     sql_pool = sqlcnnPool;
     m_rootPath = root;
@@ -86,20 +86,22 @@ void http_connect::read()
             close_conn();
         }
         modfd(epollfd, m_sockfd, EPOLLOUT, 0);
+        sql_pool->releaseConnection(mysqlDB);
     }
-}
+}   
 
 void http_connect::write()
 {
     if(need_to_sent == 0)
     {
+        printf("no file\n");
         // 如果没有需要发送的数据，直接返回
         modfd(epollfd, m_sockfd, EPOLLIN, 0);
         // 重置http状态
         init();
         return;
     }
-
+    printf("file_name: %s\n", m_requestFile.c_str());
     while(true)
     {
         int sz = writev(m_sockfd, m_iov, iovLen);
@@ -420,11 +422,12 @@ http_connect::HTTP_CODE http_connect::parse_content(char *lineBegin)
 http_connect::HTTP_CODE http_connect::do_request()
 {
 #ifdef DEBUG
-    std::cout << "requestFile: " << m_requestFile << std::endl;
+    printf("(%s %s) %s:%s(%ld) %s%s\n", __DATE__, __TIME__, 
+                __FILE__, __func__, __LINE__, "requestFile: ", m_requestFile.c_str());
 #endif
 
     // 如果是登录或者注册页面提交的数据，需要对用户名和密码进行验证，然后决定最中需要返回给客户端的html页面
-    // 提取用户名和密码 user=123&passwd=123
+    // 提取用户名和密码 user=123&password=123
     if(m_currentMethod == POST && (strcasecmp(m_currentURL + 1, "loginError.html") == 0 || 
                                     strcasecmp(m_currentURL + 1, "registerError.html") == 0))
     {
@@ -435,7 +438,7 @@ http_connect::HTTP_CODE http_connect::do_request()
             ++i;
         m_content_text[i] = '\0';
         name = &m_content_text[5];
-        pwd = &m_content_text[i + 8];
+        pwd = &m_content_text[i + 10];
 
         // 如果是登录，查询用户名和密码是否正确
         if(strcasecmp(m_currentURL + 1, "loginError.html") == 0)
@@ -445,6 +448,7 @@ http_connect::HTTP_CODE http_connect::do_request()
             sentence.append("\" && passwd=\"");
             sentence.append(pwd);
             sentence.append("\";");
+            mysqlDB->connect();
             MYSQL_RES *res = mysqlDB->inquire(sentence);
             if(!res)
             {
@@ -480,6 +484,7 @@ http_connect::HTTP_CODE http_connect::do_request()
             sentence = "select username from  user where username=\"";
             sentence.append(name);
             sentence.append("\"");
+            mysqlDB->connect();
             MYSQL_RES *res = mysqlDB->inquire(sentence);
             if(!res)
             {
@@ -496,7 +501,7 @@ http_connect::HTTP_CODE http_connect::do_request()
 
             //从结果集中获取一行，如果有数据，说明该用户名已存在
             MYSQL_ROW row = mysql_fetch_row(res);
-            if(name == row[0])
+            if(row && name == row[0])
             {
                 // 有这个用户
                 // 指定返回给客户端的html文件
@@ -521,11 +526,13 @@ http_connect::HTTP_CODE http_connect::do_request()
                 // 指定返回给客户端的html文件
                 m_requestFile += "/judge.html";
             }
-        } 
+        }
     }
-    
-    // 如果URL并不是登录也不是注册页面，直接指定用户请求的页面文件
-    m_requestFile += m_currentURL;
+    else
+    {
+        // 如果URL并不是登录也不是注册页面，直接指定用户请求的页面文件
+        m_requestFile += m_currentURL;
+    }
 
     // 判断页面文件的状态
     if(stat(m_requestFile.c_str(), &m_file_stat) == -1)
@@ -607,6 +614,7 @@ bool http_connect::write_parse(HTTP_CODE readRet)
             m_iov[1].iov_len = m_file_stat.st_size;
             iovLen = 2;
             need_to_sent = m_write_idx + m_file_stat.st_size;
+            return true;
         }
         else
         {

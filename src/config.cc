@@ -44,7 +44,7 @@ bool config::getconfig()
             if(str_config.substr(0, idx) == "webIp")
             {
                 webIP = str_config.substr(idx + 1, str_config.size());
-                if(webIP == "0")
+                if(webIP == DEFAULT_VALUE)
                 {
                     webIP = "INADDR_ANY";
                 }
@@ -62,7 +62,7 @@ bool config::getconfig()
                 sqlHost = str_config.substr(idx + 1, str_config.size());
                 if(sqlHost == DEFAULT_VALUE)
                 {
-                    sqlPort = "localhost";
+                    sqlHost = "localhost";
                 }
             }
             else if(str_config.substr(0, idx) == "sqlPort")

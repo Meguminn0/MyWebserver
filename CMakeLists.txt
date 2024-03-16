@@ -10,7 +10,7 @@ set(HEAD_PATH ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 
 # 可执行程序的生成目录
-set(EXE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/build/bin)
+set(EXE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 
 # 可执行程序的名称
 set(EXE_NAME mywebserver)

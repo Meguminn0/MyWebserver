@@ -83,6 +83,9 @@ void WebServer::WebListen()
 
     // 使用 epoll IO多路复用模型
     epollfd = epoll_create(1024);
+
+    // 同时给http_connect类中的epollfd赋值
+    http_connect::epollfd = epollfd;
     if(epollfd == -1)
     {
 #ifdef DEBUG
@@ -91,8 +94,7 @@ void WebServer::WebListen()
 #endif
         exit(EXIT_FAILURE);
     }
-
-
+    
     epoll_addfd(sockfd_listen, false, 0);
 }
 
@@ -146,8 +148,7 @@ void WebServer::eventLoop()
             if(sockfd == sockfd_listen)
             {
 #ifdef DEBUG
-               printf("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
-                __FILE__, __func__, __LINE__, "客户端已连接");
+               printf("客户端已连接\n");
 #endif
                 // 处理客户端连接请求
                 bool flag = doClientRequest();
@@ -163,17 +164,11 @@ void WebServer::eventLoop()
             }
             else if(epollEvents[i].events & EPOLLIN)
             {
-#ifdef DEBUG
-                printf("%s\n", "passR");
-#endif
                 // 处理客户端发送的数据
                 doClientRead(sockfd);
             }
             else if(epollEvents[i].events & EPOLLOUT)
             {
-#ifdef DEBUG
-                printf("%s\n", "passW");
-#endif
                 // 向客户端发送数据
                 doClientWrite(sockfd);
             }
