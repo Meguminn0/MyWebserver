@@ -1,24 +1,30 @@
 #include "webserver.h"
 
-WebServer::WebServer()
+webServer::webServer()
 {
     http_user = new http_connect[MAX_FD];
+    cdata = new client_data[MAX_FD];
     http_root = "./Root";
 }
 
-WebServer::~WebServer()
+webServer::~webServer()
 {
+    close(tools::sockPipefd[0]);
+    close(tools::sockPipefd[1]);
+    
     delete thd_Pool;
+    delete[] http_user;
+    delete[] cdata;
 }
 
-void WebServer::init_web(std::string webIP, std::string webPort)
+void webServer::init_web(std::string webIP, std::string webPort)
 {
     web_IP = webIP;
     web_port = std::stoi(webPort);
 }
 
-// WebServer 数据库连接初始化
-void WebServer::init_sql(int sqlNum, std::string sqlUserName, std::string sqlPwd, std::string databasesName, 
+// webServer 数据库连接初始化
+void webServer::init_sql(int sqlNum, std::string sqlUserName, std::string sqlPwd, std::string databasesName, 
                             std::string sqlAddr, std::string sqlPort)
 {
     sqlPool_sqlNum = sqlNum;
@@ -32,13 +38,13 @@ void WebServer::init_sql(int sqlNum, std::string sqlUserName, std::string sqlPwd
     sql_pool->init(sqlPool_sqlNum, sql_addr, sql_port, sql_userName, sql_pwd, sql_databaseName);
 }
 
-void WebServer::init_thread_pool(int threadsNum)
+void webServer::init_thread_pool(int threadsNum)
 {
     threads_num = threadsNum;
     thd_Pool = new threadPool(threads_num);
 }
 
-void WebServer::WebListen()
+void webServer::webListen()
 {
     int flag = 0;
     sockfd_listen = socket(AF_INET, SOCK_STREAM, 0);
@@ -83,9 +89,6 @@ void WebServer::WebListen()
 
     // 使用 epoll IO多路复用模型
     epollfd = epoll_create(1024);
-
-    // 同时给http_connect类中的epollfd赋值
-    http_connect::epollfd = epollfd;
     if(epollfd == -1)
     {
 #ifdef DEBUG
@@ -94,46 +97,34 @@ void WebServer::WebListen()
 #endif
         exit(EXIT_FAILURE);
     }
+    // 同时给http_connect类和tools类中的epollfd赋值
+    http_connect::epollfd = epollfd;
+    tools::epollfd = epollfd;
+    tool.epoll_addfd(sockfd_listen, false);
+
+    // 创建socketpair本地本地套接字对，用于传输信号
+    // 虽然它一般用于进程间管导通信，为了让项目更有逼格，多学一点
+    int ret = socketpair(AF_LOCAL, SOCK_STREAM, 0, sockPipefd);
+    tools::sockPipefd = sockPipefd;
+    assert(ret != -1);
+    tool.setnonblocking(sockPipefd[1]);
+    tool.epoll_addfd(sockPipefd[0], false);
     
-    epoll_addfd(sockfd_listen, false, 0);
+    tool.addsig(SIGPIPE, SIG_IGN);
+    tool.addsig(SIGALRM, tool.sig_handler);
+    tool.addsig(SIGTERM, tool.sig_handler);
+    // 使用alarm设置定时周期
+    alarm(5);
 }
 
-int WebServer::setnonblocking(int fd)
-{
-    int old_opt = fcntl(fd, F_GETFL);
-    int new_opt = old_opt | O_NONBLOCK;
-    fcntl(fd, F_SETFL, new_opt);
-
-    return old_opt;
-}
-
-void WebServer::epoll_addfd(int fd, bool set_oneShot, int TRIGMode)
-{
-    struct epoll_event ev;
-    ev.data.fd = fd;
-
-    ev.events = EPOLLIN;
-    if(set_oneShot)
-    {
-        // 设置之后只监听一次，若还想继续监听，可再将sockfd加入到epoll集合中
-        // 服务器监听sockfd不设置，客户端sockdf设置，减少资源消耗，
-        // web服务器只有少部分客户端活跃
-        ev.events |= EPOLLONESHOT;
-    }
-    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
-
-    // 设置为非阻塞，当sockfd中没有数据时不会被阻塞
-    setnonblocking(fd);
-}
-
-void WebServer::eventLoop()
+void webServer::eventLoop()
 {
     bool stop_server = false;
 
     while(!stop_server)
     {
         int eventNum = epoll_wait(epollfd, epollEvents, MAX_EPOLLEVENT_NUM, -1);
-        if(eventNum == -1)
+        if(eventNum < 0 && errno != EINTR)
         {
 #ifdef DEBUG
             printf("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
@@ -162,6 +153,12 @@ void WebServer::eventLoop()
                 // 如果对方 读关闭|挂断连接|出现异常，关闭连接
                 closeConnect(sockfd);
             }
+            else if ((sockfd == tool.sockPipefd[0]) && (epollEvents[i].events & EPOLLIN))
+            {
+                // 收到定时信号
+                doSignal(&stop_server);
+            }
+            
             else if(epollEvents[i].events & EPOLLIN)
             {
                 // 处理客户端发送的数据
@@ -176,7 +173,36 @@ void WebServer::eventLoop()
     }
 }
 
-bool WebServer::doClientRequest()
+
+bool webServer::doSignal(bool *stop)
+{
+    char signals[1024];
+    int ret = recv(tool.sockPipefd[0], signals, sizeof(signals), 0);
+    if(ret <= 0)
+    {
+        return false;
+    }
+    else
+    {
+        for (int i = 0; i < ret; ++i)
+        {
+            if (signals[i] == SIGALRM)
+            {
+                tool.timer_handler();
+                break;
+            }
+            else if(signals[i] == SIGTERM)
+            {
+                *stop = true;
+                break;
+            }
+        }
+    }
+
+    return true;
+}
+
+bool webServer::doClientRequest()
 {
     struct sockaddr_in client_addr;
     socklen_t client_addrLen = sizeof(client_addr);
@@ -191,44 +217,66 @@ bool WebServer::doClientRequest()
     }
     
     http_user[sockfd_client].init(sockfd_client, client_addr, sql_pool, http_root, sql_userName, sql_pwd, sql_databaseName);
+    cdata[sockfd_client].sockfd = sockfd_client;
+    cdata[sockfd_client].tm = new timer(tools::TIMESLOT * 3);
+    cdata[sockfd_client].tm->callBack_func(tools::timer_callBack, sockfd_client);
+    tool.timer_mg.add_timer(cdata[sockfd_client].tm);
 
     return true;
 }
 
-void WebServer::closeConnect(int sockfd)
+void webServer::closeConnect(int sockfd)
 {
 #ifdef DEBUG
     printf("%s\n", "close");
 #endif
-    epoll_ctl(epollfd, EPOLL_CTL_DEL, sockfd, 0);
-    close(sockfd);
+    timer *timer = cdata[sockfd].tm;
+    timer->action_func();
+    if(timer)
+    {
+        tool.timer_mg.delete_timer(timer);
+        cdata[sockfd].tm = nullptr;
+    }
 }
 
-void WebServer::doClientRead(int sockfd)
+void webServer::doClientRead(int sockfd)
 {
     // 处理客户端发来的数据
     // 将客户端对应的http对象的数据处理状态设为读取状态
     http_user[sockfd].m_RWStat = http_connect::HTTP_READ_STATUS;
+    // 将套接字对应的定时器时间向后延迟
+    timer* tm = cdata[sockfd].tm;
+    if(tm)
+    {
+        tm->setExpireTIme(tm->getNow_sec() + tools::TIMESLOT * 3);
+        tool.timer_mg.adjust_timer(tm);
+    }
     // 将读取任务放入线程池中执行
     thd_Pool->append_task(read_work, &http_user[sockfd]);
 }
 
-void WebServer::doClientWrite(int sockfd)
+void webServer::doClientWrite(int sockfd)
 {
     // 将准备好的数据发送给客户端
     // 将客户端对应的http对象的数据处理状态设为写入状态
     http_user[sockfd].m_RWStat = http_connect::HTTP_WRITE_STATUS;
+    // 将套接字对应的定时器时间向后延迟
+    timer* tm = cdata[sockfd].tm;
+    if(tm)
+    {
+        tm->setExpireTIme(tm->getNow_sec() + tools::TIMESLOT * 3);
+        tool.timer_mg.adjust_timer(tm);
+    }
     // 将写入任务放入线程池中执行
     thd_Pool->append_task(write_work, &http_user[sockfd]);
 }
 
-void WebServer::read_work(http_connect* http)
+void webServer::read_work(http_connect* http)
 {
     http->read(); 
 }
 
-
-void WebServer::write_work(http_connect* http)
+void webServer::write_work(http_connect* http)
 {
     http->write();
 }

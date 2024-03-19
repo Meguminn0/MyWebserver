@@ -7,8 +7,10 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
-
+#include <signal.h>
 #include <sys/epoll.h>
+#include <cstring>
+#include <cerrno>
 
 #include <assert.h>
 #include <cstring>
@@ -16,17 +18,19 @@
 #include "my_threadPool.h"
 #include "sqlConnectPool.h"
 #include "http_connect.h"
+#include "timer.h"
+#include "myTools.h"
 
 #include "debug.h"
 
 #define MAX_EPOLLEVENT_NUM 4096     // 最大epoll事件数
 #define MAX_FD 65536             // 最大文件描述符
 
-class WebServer
+class webServer
 {
 public:
-    WebServer();
-    ~WebServer();
+    webServer();
+    ~webServer();
 
     // WebServer 基础信息初始化
     void init_web(std::string webIP, std::string webPort);
@@ -36,9 +40,16 @@ public:
     // WebServer 线程池初始化
     void init_thread_pool(int threadsNum);
     // 网络监听
-    void WebListen();
+    void webListen();
     // 循环处理监听事件
     void eventLoop();
+
+    static void read_work(http_connect* http);
+    static void write_work(http_connect* http);
+
+private:
+    // 处理信号
+    bool doSignal(bool *stop);
     // 处理客户端连接请求
     bool doClientRequest();
     // 关闭客户端连接
@@ -48,17 +59,12 @@ public:
     // 向客户端发送数据
     void doClientWrite(int sockfd);
 
-    static void read_work(http_connect* http);
-    static void write_work(http_connect* http);
-
-private:
-    // 内部封装的函数
-    int setnonblocking(int fd);    /* sockfd设置为非阻塞模式 */
-    void epoll_addfd(int fd, bool set_oneShot, int TRIGMode);   /* 将fd加入epoll监听集合中 */
-
     // webserver相关变量
-    std::string web_IP; /* web服务所在的IP */
-    int web_port;       /* web服务所在的端口号 */
+    std::string web_IP;         /* web服务所在的IP */
+    int web_port;               /* web服务所在的端口号 */
+    int sockPipefd[2];          /* socketpair 管道 */
+    client_data *cdata;         /* 保存每个连接客户的定时器和套接字 */
+    tools tool;                 /* 工具类 */
 
     // 数据库相关变量
     sqlConnectPool* sql_pool = nullptr; /* 数据库连接池指针 */

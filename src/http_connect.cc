@@ -167,7 +167,7 @@ bool http_connect::read_once()
     }
     // 本次读取的字节数
     int current_idx = recv(m_sockfd, readBuff + m_read_idx, READBUFF_MAX_LEN - m_read_idx, 0);
-    if(current_idx == -1)
+    if(current_idx <= 0)
     {
         return false;
     }

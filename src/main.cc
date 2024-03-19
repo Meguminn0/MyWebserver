@@ -10,7 +10,7 @@ int main()
         return EXIT_FAILURE;
     }
 
-    WebServer webserver;
+    webServer webserver;
 
     // 服务器初始化
     webserver.init_web(cfg.webIP, cfg.webPort);
@@ -23,7 +23,7 @@ int main()
     webserver.init_thread_pool(6);
 
     // 打开监听
-    webserver.WebListen();
+    webserver.webListen();
     
     // 运行
     webserver.eventLoop();
