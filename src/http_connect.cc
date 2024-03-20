@@ -36,6 +36,9 @@ void http_connect::addfd(int epfd, int fd, bool one_shot)
 
 void http_connect::init()
 {
+    m_RWflag = false;
+    m_RWErrorFlag = false;
+
     mysqlDB = nullptr;
     m_read_idx = 0;
     m_write_idx = 0;
@@ -53,7 +56,6 @@ void http_connect::init()
     m_head_connectionVal = false;
     m_head_hostVal = nullptr;
     m_content_text = nullptr;
-    m_file_address = nullptr;
     m_requestFile = m_rootPath;
 }
 
@@ -67,67 +69,73 @@ int http_connect::setnonblock(int fd)
 
 void http_connect::read()
 {
-    // 每读取一次就解析一次
-    if(read_once())
-    {
-        // 读取成功，开始解析数据
-        mysqlDB = sql_pool->getConnection();
-        HTTP_CODE readParse_ret = read_parse();
-         if (readParse_ret == NO_REQUEST)
-        {
-            modfd(epollfd, m_sockfd, EPOLLIN, 0);
-            return;
-        }
+    // 读取成功，开始解析数据
+    mysqlDB = sql_pool->getConnection();
 
-        // 读取的数据全部解析完成，开始写入数据并发送给客户端
-        bool writeParse_ret = write_parse(readParse_ret);
-        if (!writeParse_ret)
-        {
-            close_conn();
-        }
-        modfd(epollfd, m_sockfd, EPOLLOUT, 0);
-        sql_pool->releaseConnection(mysqlDB);
+    HTTP_CODE readParse_ret = read_parse();
+    if (readParse_ret == NO_REQUEST)
+    {
+        modfd(epollfd, m_sockfd, EPOLLIN, 0);
+        return;
     }
+
+    sql_pool->releaseConnection(mysqlDB);
+
+    // 读取的数据全部解析完成，开始写入数据并发送给客户端
+    bool writeParse_ret = write_parse(readParse_ret);
+    if (!writeParse_ret)
+    {
+        close_conn();
+    }
+    modfd(epollfd, m_sockfd, EPOLLOUT, 0);
+    return;
 }   
 
-void http_connect::write()
+bool http_connect::write()
 {
     if(need_to_sent == 0)
     {
+#ifdef DEBUG
         printf("no file\n");
-        // 如果没有需要发送的数据，直接返回
+#endif
         modfd(epollfd, m_sockfd, EPOLLIN, 0);
         // 重置http状态
         init();
-        return;
+        return true;
     }
+
+#ifdef DEBUG
     printf("file_name: %s\n", m_requestFile.c_str());
+#endif
+
     while(true)
     {
         int sz = writev(m_sockfd, m_iov, iovLen);
-        if(sz == -1)
+        if(sz < 0)
         {
             if(errno == EAGAIN)
             {
+                // 发送缓冲区写满了，中断本次发送
                 modfd(epollfd, m_sockfd, EPOLLOUT, 0);
-                return;
+                return true;;
             }
+            // 写入异常，取消发送
             unmap();
-            return;
+            return false;
         }
         has_been_sent += sz;
         need_to_sent -= sz;
         // 如果一次没法送完，更新下一次发送的起始地址
         if(need_to_sent >= m_iov[0].iov_len)
         {
-            m_iov[0].iov_base = nullptr;
+            m_iov[0].iov_len = 0;
             m_iov[1].iov_base = m_file_address + (has_been_sent - m_write_idx);
             m_iov[1].iov_len = need_to_sent;
         }
         else
         {
             m_iov[0].iov_base = writeBuff + has_been_sent;
-            m_iov[0].iov_len = m_write_idx - has_been_sent;
+            m_iov[0].iov_len = m_iov[0].iov_len - has_been_sent;
         }
 
         // 如果发送完，释放html文件在内存中的映射，并修改sockfd在epoll中的状态
@@ -139,9 +147,10 @@ void http_connect::write()
             if(m_head_connectionVal)
             {
                 init();
-                return;
+                return true;;
             }
-            return;
+            
+            return false;
         }
     }
 }

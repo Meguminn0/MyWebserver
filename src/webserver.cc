@@ -228,7 +228,8 @@ bool webServer::doClientRequest()
 void webServer::closeConnect(int sockfd)
 {
 #ifdef DEBUG
-    printf("%s\n", "close");
+    printf("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
+                __FILE__, __func__, __LINE__, "close");
 #endif
     timer *timer = cdata[sockfd].tm;
     timer->action_func();
@@ -253,6 +254,20 @@ void webServer::doClientRead(int sockfd)
     }
     // 将读取任务放入线程池中执行
     thd_Pool->append_task(read_work, &http_user[sockfd]);
+    while(true)
+    {
+        if(http_user[sockfd].m_RWflag)
+        {
+            if(http_user[sockfd].m_RWErrorFlag)
+            {
+                // 读取错误，删除对应的定时器，并关闭连接
+                closeConnect(sockfd);
+                http_user[sockfd].m_RWErrorFlag = false;
+            }
+            http_user[sockfd].m_RWflag = false;
+            break;
+        }
+    }
 }
 
 void webServer::doClientWrite(int sockfd)
@@ -269,14 +284,49 @@ void webServer::doClientWrite(int sockfd)
     }
     // 将写入任务放入线程池中执行
     thd_Pool->append_task(write_work, &http_user[sockfd]);
+    while(true)
+    {
+        if(http_user[sockfd].m_RWflag)
+        {
+            if(http_user[sockfd].m_RWErrorFlag)
+            {
+                // 读取错误，删除对应的定时器，并关闭连接
+                closeConnect(sockfd);
+                http_user[sockfd].m_RWErrorFlag = false;
+            }
+            http_user[sockfd].m_RWflag = false;
+            break;
+        }
+    }
 }
 
 void webServer::read_work(http_connect* http)
 {
-    http->read(); 
+    if(http->read_once())
+    {
+        // 读取成功，设置状态并开始解析数据
+        http->m_RWflag = true;
+        http->read();
+    }
+    else
+    {
+        // 读取失败，设置异常状态
+        http->m_RWflag = true;
+        http->m_RWErrorFlag = true;
+    }
 }
 
 void webServer::write_work(http_connect* http)
 {
-    http->write();
+    if(http->write())
+    {
+        // 发送完成，设置状态
+        http->m_RWflag = true;
+    }
+    else
+    {
+        // 发送失败，设置异常状态
+        http->m_RWflag = true;
+        http->m_RWErrorFlag = true;
+    }
 }

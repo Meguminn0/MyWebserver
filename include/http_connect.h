@@ -126,14 +126,14 @@ public:
 
     // 读取数据的函数入口
     void read();
+    // 读取一次客户端发来的数据，可能不会一次性读取完
+    bool read_once();
     // 写入数据的函数入口
-    void write();
+    bool write();
 
 private:
     //将事件重置为EPOLLONESHOT
     void modfd(int epollfd, int fd, int ev, int TRIGMode);
-    // 读取一次客户端发来的数据，可能不会一次性读取完
-    bool read_once();
 
     // 解析读取的内容
     HTTP_CODE read_parse();
@@ -173,6 +173,8 @@ private:
 public:
     static int epollfd;
     int m_RWStat;   /* http数据处理状态：HTTP_READ_STATUS为读，HTTP_WRITE_STATUS为写 */
+    bool m_RWflag;      /* 读取或者写入状态标识 */
+    bool m_RWErrorFlag; /* 读取或者写入异常标识 */
 
 private:
     // http 基础变量
