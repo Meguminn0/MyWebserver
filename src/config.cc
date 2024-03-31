@@ -22,6 +22,15 @@ config::config()
 
     //并发模型,默认是proactor
     actor_model = 0;
+
+    // 日志文件路径
+    logFilePath = "./config/Log"; 
+
+    // 日志缓冲区大小   
+    logBuffSize = 2048;
+
+    // 日志文件最大行数
+    maxLogLines = 100;
 }
 
 bool config::getconfig()
@@ -85,20 +94,35 @@ bool config::getconfig()
             {
                 sqlDatabaseName = str_config.substr(idx + 1, str_config.size());
             }
+            else if(str_config.substr(0, idx) == "logFilePath")
+            {
+                logFilePath = str_config.substr(idx + 1, str_config.size());
+            }
+            else if(str_config.substr(0, idx) == "logBuffSize")
+            {
+                logBuffSize = stoi(str_config.substr(idx + 1, str_config.size()));
+            }
+            else if(str_config.substr(0, idx) == "maxLogLines")
+            {
+                maxLogLines = stoi(str_config.substr(idx + 1, str_config.size()));
+            }
         }
     }
 
-#ifdef DEBUG
-    std::cout << "========== config message ==========\n";
-    std::cout << "webIP: " << webIP << '\n';
-    std::cout << "webPort: " << webPort << '\n';
-    std::cout << "sqlHost: " << sqlHost << '\n';
-    std::cout << "sqlPort: " << sqlPort << '\n';
-    std::cout << "sqlUserName: " << sqlUserName << '\n';
-    std::cout << "sqlPwd: " << sqlPwd << '\n';
-    std::cout << "sqlDatabaseName: " << sqlDatabaseName << '\n';
-    std::cout << "============ config end ============\n";
-#endif
+// #ifdef DEBUG
+//     std::cout << "========== config message ==========\n";
+//     std::cout << "webIP: " << webIP << '\n';
+//     std::cout << "webPort: " << webPort << '\n';
+//     std::cout << "sqlHost: " << sqlHost << '\n';
+//     std::cout << "sqlPort: " << sqlPort << '\n';
+//     std::cout << "sqlUserName: " << sqlUserName << '\n';
+//     std::cout << "sqlPwd: " << sqlPwd << '\n';
+//     std::cout << "sqlDatabaseName: " << sqlDatabaseName << '\n';
+//     std::cout << "logFilePath: " << logFilePath << '\n';
+//     std::cout << "logBuffSize: " << logBuffSize << '\n';
+//     std::cout << "maxLogLines: " << maxLogLines << '\n';
+//     std::cout << "============ config end ============\n";
+// #endif
 
     return true;
 }

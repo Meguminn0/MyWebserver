@@ -23,7 +23,12 @@ void webServer::init_web(std::string webIP, std::string webPort)
     web_port = std::stoi(webPort);
 }
 
-// webServer 数据库连接初始化
+
+void webServer::init_log(std::string logFilePath, int logBuffSize, int maxLogLines)
+{
+    log::getInstance()->init(logFilePath.c_str(), logBuffSize, maxLogLines);
+}
+
 void webServer::init_sql(int sqlNum, std::string sqlUserName, std::string sqlPwd, std::string databasesName, 
                             std::string sqlAddr, std::string sqlPort)
 {
@@ -50,10 +55,8 @@ void webServer::webListen()
     sockfd_listen = socket(AF_INET, SOCK_STREAM, 0);
     if(sockfd_listen == -1)
     {
-#ifdef DEBUG
-        printf("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
+        LOG_ERROR("(%s %s) %s:%s(%ld) %s", __DATE__, __TIME__, 
                 __FILE__, __func__, __LINE__, "Create sockfd error!");
-#endif
         exit(EXIT_FAILURE);
     }
 
@@ -70,20 +73,16 @@ void webServer::webListen()
     flag = bind(sockfd_listen, (struct sockaddr*)&addr_server, sizeof(addr_server));
     if(flag == -1)
     {
-#ifdef DEBUG
-        printf("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
+        LOG_ERROR("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
                 __FILE__, __func__, __LINE__, "bind error!");
-#endif
         exit(EXIT_FAILURE);
     }
 
     flag = listen(sockfd_listen, 10);
     if(flag == -1)
     {
-#ifdef DEBUG
-        printf("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
+        LOG_ERROR("(%s %s) %s:%s(%ld) %s", __DATE__, __TIME__, 
                 __FILE__, __func__, __LINE__, "listen error!");
-#endif
         exit(EXIT_FAILURE);
     }
 
@@ -91,10 +90,8 @@ void webServer::webListen()
     epollfd = epoll_create(1024);
     if(epollfd == -1)
     {
-#ifdef DEBUG
-        printf("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
+        LOG_ERROR("(%s %s) %s:%s(%ld) %s", __DATE__, __TIME__, 
                 __FILE__, __func__, __LINE__, "Create epoll error!");
-#endif
         exit(EXIT_FAILURE);
     }
     // 同时给http_connect类和tools类中的epollfd赋值
@@ -126,10 +123,8 @@ void webServer::eventLoop()
         int eventNum = epoll_wait(epollfd, epollEvents, MAX_EPOLLEVENT_NUM, -1);
         if(eventNum < 0 && errno != EINTR)
         {
-#ifdef DEBUG
-            printf("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
+            LOG_ERROR("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
                 __FILE__, __func__, __LINE__, "epoll error!");
-#endif
             break;
         }
         
@@ -138,9 +133,7 @@ void webServer::eventLoop()
             int sockfd = epollEvents[i].data.fd;
             if(sockfd == sockfd_listen)
             {
-#ifdef DEBUG
-               printf("客户端已连接\n");
-#endif
+                LOG_INFO("客户端已连接");
                 // 处理客户端连接请求
                 bool flag = doClientRequest();
                 if(flag == false)
@@ -209,10 +202,8 @@ bool webServer::doClientRequest()
     int sockfd_client = accept(sockfd_listen, (struct sockaddr*)&client_addr, &client_addrLen);
     if(sockfd_client == -1)
     {
-#ifdef DEBUG
-        printf("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
+        LOG_ERROR("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
                 __FILE__, __func__, __LINE__, "accept error!");
-#endif
         return false;
     }
     
@@ -227,10 +218,7 @@ bool webServer::doClientRequest()
 
 void webServer::closeConnect(int sockfd)
 {
-#ifdef DEBUG
-    printf("(%s %s) %s:%s(%ld) %s\n", __DATE__, __TIME__, 
-                __FILE__, __func__, __LINE__, "close");
-#endif
+    LOG_INFO("%s %d %s\n", "client ", sockfd, " closed");
     timer *timer = cdata[sockfd].tm;
     timer->action_func();
     if(timer)

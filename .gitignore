@@ -30,6 +30,8 @@
 *.exe
 *.out
 *.app
+mywevserver
 
 #files
 build/*
+config/*

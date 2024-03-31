@@ -20,6 +20,7 @@
 #include "http_connect.h"
 #include "timer.h"
 #include "myTools.h"
+#include "log.h"
 
 #include "debug.h"
 
@@ -34,6 +35,8 @@ public:
 
     // WebServer 基础信息初始化
     void init_web(std::string webIP, std::string webPort);
+    //日志初始化
+    void init_log(std::string logFilePath, int logBuffSize = 1024, int maxLogLines = 500000);
     // WebServer 数据库连接初始化
     void init_sql(int sqlNum, std::string sqlUserName, std::string sqlPwd, std::string databasesName, 
                     std::string sqlAddr, std::string sqlPort);
@@ -59,6 +62,7 @@ private:
     // 向客户端发送数据
     void doClientWrite(int sockfd);
 
+private:
     // webserver相关变量
     std::string web_IP;         /* web服务所在的IP */
     int web_port;               /* web服务所在的端口号 */

@@ -1,4 +1,5 @@
 #include "http_connect.h"
+#include "log.h"
 
 int http_connect::epollfd = -1;
 
@@ -95,18 +96,12 @@ bool http_connect::write()
 {
     if(need_to_sent == 0)
     {
-#ifdef DEBUG
-        printf("no file\n");
-#endif
+        LOG_WARN("no file");
         modfd(epollfd, m_sockfd, EPOLLIN, 0);
         // 重置http状态
         init();
         return true;
     }
-
-#ifdef DEBUG
-    printf("file_name: %s\n", m_requestFile.c_str());
-#endif
 
     while(true)
     {
@@ -400,9 +395,7 @@ http_connect::HTTP_CODE http_connect::parse_headers(char *lineBegin)
     }
     else
     {
-#ifdef DEBUG
-        std::cout << "o,no! unknow header val: " << lineBegin << std::endl;
-#endif
+        LOG_WARN("o,no! unknow header val: %s", lineBegin);
     }
     
     return NO_REQUEST;
@@ -430,11 +423,6 @@ http_connect::HTTP_CODE http_connect::parse_content(char *lineBegin)
 */
 http_connect::HTTP_CODE http_connect::do_request()
 {
-#ifdef DEBUG
-    printf("(%s %s) %s:%s(%ld) %s%s\n", __DATE__, __TIME__, 
-                __FILE__, __func__, __LINE__, "requestFile: ", m_requestFile.c_str());
-#endif
-
     // 如果是登录或者注册页面提交的数据，需要对用户名和密码进行验证，然后决定最中需要返回给客户端的html页面
     // 提取用户名和密码 user=123&password=123
     if(m_currentMethod == POST && (strcasecmp(m_currentURL + 1, "loginError.html") == 0 || 
@@ -461,9 +449,7 @@ http_connect::HTTP_CODE http_connect::do_request()
             MYSQL_RES *res = mysqlDB->inquire(sentence);
             if(!res)
             {
-#ifdef DEBUG
-                std::cout << "inquire error" << std::endl;
-#endif
+                LOG_ERROR("inquire error");
                 return BAD_REQUEST;
             }
             //返回结果集中的列数
@@ -497,9 +483,7 @@ http_connect::HTTP_CODE http_connect::do_request()
             MYSQL_RES *res = mysqlDB->inquire(sentence);
             if(!res)
             {
-#ifdef DEBUG
-                std::cout << "inquire error" << std::endl;
-#endif
+                LOG_ERROR("inquire error");
                 return BAD_REQUEST;
             }
             //返回结果集中的列数
@@ -526,9 +510,7 @@ http_connect::HTTP_CODE http_connect::do_request()
                 sentence.append("\");");
                 if(!mysqlDB->add(sentence))
                 {
-#ifdef DEBUG
-                std::cout << "sql add error" << std::endl;
-#endif
+                    LOG_ERROR("sql add error");
                 return BAD_REQUEST;
                 }
 
@@ -543,6 +525,7 @@ http_connect::HTTP_CODE http_connect::do_request()
         m_requestFile += m_currentURL;
     }
 
+    LOG_INFO("%s%s\n", "requestFile: ", m_requestFile.c_str());
     // 判断页面文件的状态
     if(stat(m_requestFile.c_str(), &m_file_stat) == -1)
     {

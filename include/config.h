@@ -26,6 +26,11 @@ public:
     std::string sqlUserName;                /* 数据库用户名 */
     std::string sqlPwd;                     /* 数据库密码 */
     std::string sqlDatabaseName;            /* 使用的数据库名 */
+    
+    // 日志信息
+    std::string logFilePath;    // 日志文件路径
+    int logBuffSize;            // 日志缓冲区大小
+    int maxLogLines;            // 日志文件最大行数
 
     //日志写入方式
     int LOGWrite;

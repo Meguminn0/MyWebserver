@@ -14,14 +14,16 @@ int main()
 
     // 服务器初始化
     webserver.init_web(cfg.webIP, cfg.webPort);
-    
+
+    // 日志初始化
+    webserver.init_log(cfg.logFilePath, cfg.logBuffSize, cfg.maxLogLines);
+
     // 数据库初始化
     webserver.init_sql(10, cfg.sqlUserName, cfg.sqlPwd, 
                 cfg.sqlDatabaseName, cfg.sqlHost, cfg.sqlPort);
     
     // 线程池初始化
     webserver.init_thread_pool(6);
-
     // 打开监听
     webserver.webListen();
     

@@ -195,7 +195,7 @@ private:
     long long m_content_len;            /* 当前http请求的请求数据长度 */
 
     std::string m_requestFile;          /* 返回给客户端的html页面文件 */
-    struct stat m_file_stat;            /* 返回给客户端的html页面文件状态 */
+    struct stat m_file_stat;            /* 返回给客户端的html页文面件状态 */
     char *m_file_address;               /* 返回给客户但的html页面文件在内存中的映射地址 */
     struct iovec m_iov[2];              /* 定义两个io向量元素，用于指向我们需要的资源，如 writebuff 和 需要发送的html文件在内存中的映射地址*/
     int iovLen;                         /* iovec元素的个数 */    
